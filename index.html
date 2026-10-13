@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Impacto de Medios BTS - MML</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .bg-mml-blue { background-color: #0b2545; }
+        .text-mml-blue { color: #0b2545; }
+        
+        /* Tonos institucionales idénticos a la tabla */
+        .row-positivo { background-color: #d1e7dd !important; color: #0f5132; }
+        .row-neutro { background-color: #fff3cd !important; color: #664d03; }
+        .row-negativo { background-color: #f8d7da !important; color: #842029; }
+
+        /* Resumen con colores más intensos y negrita */
+        .card-positivas { background-color: #198754 !important; color: #ffffff !important; }
+        .card-neutras { background-color: #ffc107 !important; color: #000000 !important; }
+        .card-negativas { background-color: #dc3545 !important; color: #ffffff !important; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col">
+
+    <!-- HEADER INSTITUCIONAL -->
+    <header class="bg-mml-blue text-white shadow-md border-b-4 border-amber-500 py-3 px-6 flex flex-col sm:flex-row justify-between items-center">
+        <div class="flex items-center space-x-3 mb-2 sm:mb-0">
+            <!-- Logo oficial proporcionado -->
+            <img src="https://i.ibb.co/3ykXmYg/Municipalidad-de-Lima-logo.png" alt="Municipalidad de Lima" class="h-12 w-auto bg-white p-1 rounded shadow" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/2/23/Escudo_de_Lima_%28oficial%29.png'">
+            <div>
+                <h1 class="text-lg font-bold tracking-wide uppercase">REPORTE DE IMPACTO DE MEDIOS BTS</h1>
+                <p class="text-xs text-slate-300">Municipalidad Metropolitana de Lima • Monitoreo de Prensa y Redes</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button onclick="resetFilters()" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs font-semibold shadow transition flex items-center">
+                <i class="fa-solid fa-rotate-right mr-1.5"></i> Restablecer Filtros
+            </button>
+            <button onclick="exportExcel()" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded text-xs font-semibold shadow transition flex items-center">
+                <i class="fa-solid fa-file-excel mr-1.5"></i> Descargar Excel
+            </button>
+            <button onclick="exportPDF()" class="bg-rose-700 hover:bg-rose-600 text-white px-3 py-1.5 rounded text-xs font-semibold shadow transition flex items-center">
+                <i class="fa-solid fa-file-pdf mr-1.5"></i> Descargar PDF
+            </button>
+        </div>
+    </header>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <main class="flex-grow max-w-7xl w-mx mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+
+        <!-- TARJETAS DE RESUMEN (KPIs) CON COLORES INTENSOS Y NEGRITA -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-lg shadow p-4 border border-slate-200 flex flex-col justify-between">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider"># Menciones</span>
+                <span id="kpi-total" class="text-3xl font-black text-slate-800 mt-2">0</span>
+            </div>
+            <div class="card-positivas rounded-lg shadow p-4 flex flex-col justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider opacity-90"># Positivas</span>
+                <span id="kpi-positivas" class="text-3xl font-black mt-2">0</span>
+            </div>
+            <div class="card-neutras rounded-lg shadow p-4 flex flex-col justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider opacity-90"># Neutras</span>
+                <span id="kpi-neutras" class="text-3xl font-black mt-2">0</span>
+            </div>
+            <div class="card-negativas rounded-lg shadow p-4 flex flex-col justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider opacity-90"># Negativas</span>
+                <span id="kpi-negativas" class="text-3xl font-black mt-2">0</span>
+            </div>
+        </div>
+
+        <!-- PANEL DE FILTROS -->
+        <div class="bg-white rounded-lg shadow p-4 border border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Buscar (Titular o Resumen)</label>
+                <input type="text" id="filter-search" oninput="applyFilters()" placeholder="Ej. Concierto, San Marcos..." class="w-full text-xs border border-slate-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Fecha</label>
+                <input type="date" id="filter-date" onchange="applyFilters()" class="w-full text-xs border border-slate-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tono / Criterio</label>
+                <select id="filter-tono" onchange="applyFilters()" class="w-full text-xs border border-slate-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">Todos los tonos</option>
+                    <option value="Positivo">Positivo</option>
+                    <option value="Neutro">Neutro</option>
+                    <option value="Negativo">Negativo</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tipo de Medio</label>
+                <select id="filter-medio" onchange="applyFilters()" class="w-full text-xs border border-slate-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="">Todos los medios</option>
+                </select>
+            </div>
+            <div>
+                <button onclick="resetFilters()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs py-2 px-3 rounded transition">
+                    Limpiar Filtros
+                </button>
+            </div>
+        </div>
+
+        <!-- TABLA DE DATOS -->
+        <div class="bg-white rounded-lg shadow border border-slate-200 overflow-hidden flex flex-col">
+            <div class="overflow-x-auto">
+                <table id="main-table" class="w-full text-left border-collapse">
+                    <thead class="bg-slate-800 text-white text-xs uppercase font-semibold">
+                        <tr>
+                            <th class="p-3">Fecha</th>
+                            <th class="p-3">Titular / Medio</th>
+                            <th class="p-3">Tono</th>
+                            <th class="p-3">Resumen</th>
+                            <th class="p-3 text-center">Enlace</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="text-xs divide-y divide-slate-200">
+                        <!-- Datos cargados dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+            <!-- Paginación -->
+            <div class="bg-slate-50 px-4 py-3 border-t border-slate-200 flex justify-between items-center text-xs text-slate-600">
+                <span id="table-counter">Mostrando 0 registros</span>
+                <div class="space-x-2">
+                    <button onclick="changePage(-1)" id="btn-prev" class="px-3 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50">Anterior</button>
+                    <button onclick="changePage(1)" id="btn-next" class="px-3 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50">Siguiente</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-mml-blue text-slate-300 text-center py-3 text-xs border-t border-slate-700 mt-auto">
+        Municipalidad Metropolitana de Lima • Sistema de Monitoreo y Gestión de Prensa
+    </footer>
+
+    <!-- SCRIPT DE CARGA Y FILTRADO -->
+    <script>
+        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTgrrThi0xA9PEOpx858NWgsB279rXuaqjoFpgAUdnxWaifHUaNOlo6P1sb7jrVKx3bVZ0TsUzG7GRo/pub?output=csv";
+        
+        let allData = [];
+        let filteredData = [];
+        let currentPage = 1;
+        const rowsPerPage = 15;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    allData = results.data.map(row => ({
+                        fecha: row['Fecha'] || '',
+                        medio: row['Nombre del medio'] || '',
+                        tipoMedio: row['TIPO DE MEDIO'] || '',
+                        tono: (row['CRITERIO DE IMAGEN MML '] || '').trim(),
+                        titular: row['TITULAR '] || row['TITULAR'] || '',
+                        resumen: row['RESUMEN'] || '',
+                        link: row['LINK'] || ''
+                    }));
+                    
+                    // Poblar selector de tipos de medio
+                    const tiposMedio = [...new Set(allData.map(item => item.tipoMedio))].filter(Boolean);
+                    const selectMedio = document.getElementById('filter-medio');
+                    tiposMedio.forEach(t => {
+                        let opt = document.createElement('option');
+                        opt.value = t;
+                        opt.textContent = t;
+                        selectMedio.appendChild(opt);
+                    });
+
+                    filteredData = [...allData];
+                    updateDashboard();
+                },
+                error: function(err) {
+                    console.error("Error al cargar el CSV:", err);
+                    document.getElementById('table-body').innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-600 font-semibold">Error al conectar con la base de datos de Google Sheets.</td></tr>`;
+                }
+            });
+        });
+
+        function applyFilters() {
+            const searchVal = document.getElementById('filter-search').value.toLowerCase();
+            const dateVal = document.getElementById('filter-date').value;
+            const tonoVal = document.getElementById('filter-tono').value;
+            const medioVal = document.getElementById('filter-medio').value;
+
+            filteredData = allData.filter(item => {
+                const matchSearch = item.titular.toLowerCase().includes(searchVal) || item.resumen.toLowerCase().includes(searchVal);
+                const matchTono = !tonoVal || item.tono.toLowerCase() === tonoVal.toLowerCase();
+                const matchMedio = !medioVal || item.tipoMedio === medioVal;
+                // Coincidencia parcial de fecha si el usuario selecciona una fecha
+                const matchDate = !dateVal || item.fecha.toLowerCase().includes(dateVal);
+
+                return matchSearch && matchTono && matchMedio && matchDate;
+            });
+
+            currentPage = 1;
+            updateDashboard();
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-search').value = '';
+            document.getElementById('filter-date').value = '';
+            document.getElementById('filter-tono').value = '';
+            document.getElementById('filter-medio').value = '';
+            filteredData = [...allData];
+            currentPage = 1;
+            updateDashboard();
+        }
+
+        function updateDashboard() {
+            // Actualizar KPIs
+            document.getElementById('kpi-total').textContent = filteredData.length;
+            document.getElementById('kpi-positivas').textContent = filteredData.filter(i => i.tono.toLowerCase() === 'positivo').length;
+            document.getElementById('kpi-neutras').textContent = filteredData.filter(i => i.tono.toLowerCase() === 'neutro').length;
+            document.getElementById('kpi-negativas').textContent = filteredData.filter(i => i.tono.toLowerCase() === 'negativo').length;
+
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginatedItems = filteredData.slice(start, end);
+
+            if (paginatedItems.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-500">No se encontraron registros coincidentes.</td></tr>`;
+                document.getElementById('table-counter').textContent = `Mostrando 0 de 0 registros`;
+                document.getElementById('btn-prev').disabled = true;
+                document.getElementById('btn-next').disabled = true;
+                return;
+            }
+
+            paginatedItems.forEach(item => {
+                let rowClass = '';
+                let badgeClass = '';
+                let tonoLower = item.tono.toLowerCase();
+                
+                if (tonoLower.includes('positivo')) {
+                    rowClass = 'row-positivo';
+                    badgeClass = 'bg-emerald-800 text-white';
+                } else if (tonoLower.includes('neutro')) {
+                    rowClass = 'row-neutro';
+                    badgeClass = 'bg-amber-600 text-white';
+                } else if (tonoLower.includes('negativo')) {
+                    rowClass = 'row-negativo';
+                    badgeClass = 'bg-rose-800 text-white';
+                } else {
+                    badgeClass = 'bg-slate-600 text-white';
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = `${rowClass} border-b border-slate-200 transition`;
+                tr.innerHTML = `
+                    <td class="p-3 font-medium whitespace-nowrap">${item.fecha}</td>
+                    <td class="p-3">
+                        <div class="font-bold text-slate-900">${item.titular}</div>
+                        <div class="text-[11px] opacity-80 uppercase tracking-wider font-semibold">${item.medio} (${item.tipoMedio})</div>
+                    </td>
+                    <td class="p-3 whitespace-nowrap">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">${item.tono || 'N/D'}</span>
+                    </td>
+                    <td class="p-3 text-slate-700 max-w-md truncate-multiline">${item.resumen}</td>
+                    <td class="p-3 text-center whitespace-nowrap">
+                        ${item.link ? `<a href="${item.link}" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded text-[11px] font-semibold shadow transition inline-block">Abrir Nota</a>` : '<span class="text-slate-400 text-[11px]">Sin Enlace</span>'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('table-counter').textContent = `Mostrando ${start + 1} - ${Math.min(end, filteredData.length)} de ${filteredData.length} registros`;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = end >= filteredData.length;
+        }
+
+        function changePage(direction) {
+            currentPage += direction;
+            renderTable();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function exportExcel() {
+            let dataToExport = filteredData.map(i => ({
+                Fecha: i.fecha,
+                Medio: i.medio,
+                TipoMedio: i.tipoMedio,
+                Tono: i.tono,
+                Titular: i.titular,
+                Resumen: i.resumen,
+                Enlace: i.link
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte BTS");
+            XLSX.writeFile(workbook, "Reporte_Impacto_Medios_BTS.xlsx");
+        }
+
+        function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            
+            doc.setFontSize(16);
+            doc.setTextColor(11, 37, 69);
+            doc.text("REPORTE DE IMPACTO DE MEDIOS BTS - MML", 14, 15);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generado el: ${new Date().toLocaleDateString()} | Total registros: ${filteredData.length}`, 14, 22);
+
+            let tableData = filteredData.map(i => [i.fecha, `${i.medio} (${i.tipoMedio})`, i.tono, i.titular, i.resumen.substring(0, 120) + '...']);
+
+            doc.autoTable({
+                startY: 28,
+                head: [['Fecha', 'Medio', 'Tono', 'Titular', 'Resumen']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [11, 37, 69] },
+                styles: { fontSize: 8, cellPadding: 3 },
+                columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 35 }, 2: { cellWidth: 20 }, 3: { cellWidth: 60 }, 4: { cellWidth: 140 } }
+            });
+
+            doc.save("Reporte_Impacto_Medios_BTS.pdf");
+        }
+    </script>
+</body>
+</html>
